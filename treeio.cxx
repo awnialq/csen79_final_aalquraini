@@ -54,7 +54,41 @@ ostream & operator<<(ostream &os, const TreeData &t) {
 const TreeData::HuntType TreeData::huntSplit(const int whichAttr) const {
     // Student implement
     HuntType bestSplit;
-    
+    bestSplit.second = 1.0; // worst impurity
+    const int nRecords = static_cast<int>(records.size());
+    if (nRecords < 3)
+        return bestSplit; // not enough records to split
+    struct Point {
+        Record::AttrType value;
+        double impurity;
+    };
+    Point buffer[3];
+    int bufIndex = 0;
+    // Initialize circular buffer with first 3 points
+    for (int i = 0; i < 3; ++i) {
+        buffer[i].value = records[i]->getAttribute(whichAttr);
+        buffer[i].impurity = combineImpurity(whichAttr, buffer[i].value);
+    }
+    // Scan through remaining records
+    for (int i = 3; i < nRecords; ++i) {
+        Record::AttrType currentValue = records[i]->getAttribute(whichAttr);
+        double currentImpurity = combineImpurity(whichAttr, currentValue);
+        // Check for inflection point
+        Point &prev = buffer[(bufIndex + 2) % 3];
+        Point &curr = buffer[bufIndex];
+        Point &next = buffer[(bufIndex + 1) % 3];
+        if (curr.impurity < prev.impurity && curr.impurity < next.impurity) {
+            // Found a local minimum
+            if (curr.impurity < bestSplit.second) {
+                bestSplit.first = curr.value;
+                bestSplit.second = curr.impurity;
+            }
+        }
+        // Update circular buffer
+        buffer[bufIndex].value = currentValue;
+        buffer[bufIndex].impurity = currentImpurity;
+        bufIndex = (bufIndex + 1) % 3;
+    }
     
 
     return bestSplit;
