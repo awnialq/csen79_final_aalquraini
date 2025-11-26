@@ -53,8 +53,11 @@ ostream & operator<<(ostream &os, const TreeData &t) {
  */
 const TreeData::HuntType TreeData::huntSplit(const int whichAttr) const {
     // Student implement
+    HuntType bestSplit;
     
-    return HuntType();
+    
+
+    return bestSplit;
 }
 
 // Make decision tree, recursively descend
@@ -64,18 +67,14 @@ void TreeData::makeTree() {
 
 // return a pair of TreeData separated by the split value on the given attribute
 TreeData::TreePair TreeData::split(const int i, const Record::AttrType d) const {
-    // Student implement
     TreeData left, right;
 
-    int num_rec = 0;
-    for (const auto & rec : records) {
-        if(num_rec < i) {
+    for (const auto & rec : records) {  //split each record into a right or left tree depending on attribute i
+        if (rec->getAttribute(i) <= d)
             left.records.push_back(rec);
-        } else {
+        else
             right.records.push_back(rec);
-        }
-        num_rec++;
-    }
+    } 
 
     return TreePair(left, right);
 }
