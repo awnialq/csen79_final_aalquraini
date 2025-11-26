@@ -21,6 +21,12 @@ istream & operator>>(istream &is, TreeData &t) {
     Record buf;
     while (is >> buf)  {
         // Student implement
+        try {
+            t.records.push_back(make_shared<Record>(buf));
+        } catch (bad_alloc& e) {
+            cerr << "Memory failed to allocate" << e.what() << endl;
+            break;
+        }
     }
 
     if (!t.records.empty()) {
@@ -47,6 +53,7 @@ ostream & operator<<(ostream &os, const TreeData &t) {
  */
 const TreeData::HuntType TreeData::huntSplit(const int whichAttr) const {
     // Student implement
+    
     return HuntType();
 }
 
@@ -58,7 +65,19 @@ void TreeData::makeTree() {
 // return a pair of TreeData separated by the split value on the given attribute
 TreeData::TreePair TreeData::split(const int i, const Record::AttrType d) const {
     // Student implement
-    return TreePair();
+    TreeData left, right;
+
+    int num_rec = 0;
+    for (const auto & rec : records) {
+        if(num_rec < i) {
+            left.records.push_back(rec);
+        } else {
+            right.records.push_back(rec);
+        }
+        num_rec++;
+    }
+
+    return TreePair(left, right);
 }
 
 }   // namespace
