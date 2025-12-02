@@ -5,6 +5,10 @@
  */
 #ifndef TREEDATA_H
 #define TREEDATA_H
+#include <vector>
+#include <memory>
+#include <utility>
+#include "record.h"
 namespace csen79 {
 
 class TreeData {
@@ -28,6 +32,7 @@ class TreeData {
     const double doImpurity() const;
     const HuntType huntSplit(const int) const;
 public:
+    Record::Category decide(const Record &) const;
     TreeData() { records.clear(); availableAttr.clear();}
     ~TreeData() {};
 

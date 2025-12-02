@@ -57,4 +57,40 @@ void TreeData::cullAttribute(shared_ptr<TreeData>t, Record::AttrType d) {
     }
 }
 
+// Traverse the decision tree and return the predicted category for a record
+Record::Category TreeData::decide(const Record &rec) const {
+    // If this is a leaf node (no children), return the majority category
+    if (left == nullptr && right == nullptr) {
+        int redCount = 0, blueCount = 0;
+        for (const auto& r : records) {
+            if (r->getCategory() == Record::RED)
+                ++redCount;
+            else
+                ++blueCount;
+        }
+        return (redCount >= blueCount) ? Record::RED : Record::BLUE;
+    }
+
+    // Otherwise, traverse based on the split attribute and value
+    if (rec.getAttribute(splitAttr) <= splitAt) {
+        // Go left
+        if (left != nullptr)
+            return left->decide(rec);
+    } else {
+        // Go right
+        if (right != nullptr)
+            return right->decide(rec);
+    }
+
+    // Fallback: return majority of current node if something goes wrong
+    int redCount = 0, blueCount = 0;
+    for (const auto& r : records) {
+        if (r->getCategory() == Record::RED)
+            ++redCount;
+        else
+            ++blueCount;
+    }
+    return (redCount >= blueCount) ? Record::RED : Record::BLUE;
+}
+
 }   // namespace
