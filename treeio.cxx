@@ -92,8 +92,8 @@ ostream & operator<<(ostream &os, const TreeData &t) {
                 stack.pop_back();
                 continue;
             } else {
-                // Internal node - show split condition
-                os << "Split on " << attrName(node->splitAttr) << " <= " << node->splitAt
+                // Internal node - show split condition as a question
+                os << "Is " << attrName(node->splitAttr) << " <= " << node->splitAt << "?"
                    << " (samples: " << node->records.size() 
                    << ", gini: " << fixed << setprecision(3) << node->selfImpurity << ")\n";
             }

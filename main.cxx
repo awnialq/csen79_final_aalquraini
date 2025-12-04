@@ -61,5 +61,6 @@ int main(int argc, char *argv[]) {
 
     cout << "\nAccuracy: " << correct << "/" << total << " (" << fixed << setprecision(2) << (100.0 * correct / total) << "%)" << endl;
 
+
     return 0;
 }
