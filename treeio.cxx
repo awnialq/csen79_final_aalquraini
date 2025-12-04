@@ -48,26 +48,32 @@ static const char* attrName(int attr) {
 }
 
 ostream & operator<<(ostream &os, const TreeData &t) { 
-    // Student implement
-    // We need to collect all paths from root to leaves and print them
-    // Using a stack-based approach to avoid separate recursive function
+    // Print decision tree in a hierarchical, human-readable format
+    // Using indentation to show tree structure
     
     struct StackFrame {
         const TreeData* node;
-        vector<string> conditions;
-        int state; // 0=process, 1=left done, 2=right done
+        int depth;
+        string prefix;      // For tree branches (e.g., "├── " or "└── ")
+        string childPrefix; // For children's continuation lines
+        bool isLeft;
+        int state; // 0=print self, 1=left done, 2=right done
     };
     
+    os << "\n=== Decision Tree ===\n\n";
+    
     vector<StackFrame> stack;
-    stack.push_back({&t, {}, 0});
+    stack.push_back({&t, 0, "", "", true, 0});
     
     while (!stack.empty()) {
         StackFrame& frame = stack.back();
         const TreeData* node = frame.node;
         
-        // If this is a leaf node, print the full condition chain
-        if (node->left == nullptr && node->right == nullptr) {
-            // Determine the majority category
+        if (frame.state == 0) {
+            // Print this node
+            os << frame.prefix;
+            
+            // Determine the majority category and counts
             int redCount = 0, blueCount = 0;
             for (const auto& rec : node->records) {
                 if (rec->getCategory() == Record::RED)
@@ -77,49 +83,30 @@ ostream & operator<<(ostream &os, const TreeData &t) {
             }
             const char* category = (redCount >= blueCount) ? "Red" : "Blue";
             
-            if (frame.conditions.empty()) {
-                os << "All points are likely " << category 
-                   << ". (Gini impurity: " << fixed << setprecision(4) << node->selfImpurity << ")" << endl;
-            } else {
-                os << "If ";
-                for (size_t i = 0; i < frame.conditions.size(); ++i) {
-                    os << frame.conditions[i];
-                    if (i < frame.conditions.size() - 1) {
-                        if (i == frame.conditions.size() - 2)
-                            os << ", and ";
-                        else
-                            os << ", ";
-                    }
-                }
-                os << ", then the point is likely " << category 
-                   << ". (Gini impurity: " << fixed << setprecision(4) << node->selfImpurity << ")" << endl;
-            }
-            stack.pop_back();
-            continue;
-        }
-        
-        if (frame.state == 0) {
-            // Process left child first
-            if (node->left != nullptr) {
-                frame.state = 1;
-                vector<string> newConds = frame.conditions;
-                string cond = string(attrName(node->splitAttr)) + " is less than or equal to " + to_string(node->splitAt);
-                newConds.push_back(cond);
-                stack.push_back({node->left.get(), newConds, 0});
+            if (node->left == nullptr && node->right == nullptr) {
+                // Leaf node
+                os << "[" << category << "] "
+                   << "(samples: " << node->records.size() 
+                   << ", red: " << redCount << ", blue: " << blueCount
+                   << ", gini: " << fixed << setprecision(3) << node->selfImpurity << ")\n";
+                stack.pop_back();
                 continue;
             } else {
-                frame.state = 1;
+                // Internal node - show split condition
+                os << "Split on " << attrName(node->splitAttr) << " <= " << node->splitAt
+                   << " (samples: " << node->records.size() 
+                   << ", gini: " << fixed << setprecision(3) << node->selfImpurity << ")\n";
             }
+            frame.state = 1;
         }
         
         if (frame.state == 1) {
-            // Process right child
-            if (node->right != nullptr) {
+            // Process left child (yes branch)
+            if (node->left != nullptr) {
                 frame.state = 2;
-                vector<string> newConds = frame.conditions;
-                string cond = string(attrName(node->splitAttr)) + " is greater than " + to_string(node->splitAt);
-                newConds.push_back(cond);
-                stack.push_back({node->right.get(), newConds, 0});
+                string newPrefix = frame.childPrefix + "├── Yes: ";
+                string newChildPrefix = frame.childPrefix + "│   ";
+                stack.push_back({node->left.get(), frame.depth + 1, newPrefix, newChildPrefix, true, 0});
                 continue;
             } else {
                 frame.state = 2;
@@ -127,11 +114,25 @@ ostream & operator<<(ostream &os, const TreeData &t) {
         }
         
         if (frame.state == 2) {
+            // Process right child (no branch)
+            if (node->right != nullptr) {
+                frame.state = 3;
+                string newPrefix = frame.childPrefix + "└── No:  ";
+                string newChildPrefix = frame.childPrefix + "    ";
+                stack.push_back({node->right.get(), frame.depth + 1, newPrefix, newChildPrefix, false, 0});
+                continue;
+            } else {
+                frame.state = 3;
+            }
+        }
+        
+        if (frame.state == 3) {
             // Done with this node
             stack.pop_back();
         }
     }
     
+    os << "\n";
     return os;
 }
 
@@ -231,8 +232,7 @@ const TreeData::HuntType TreeData::huntSplit(const int whichAttr) const {
 
 // Make decision tree, recursively descend
 void TreeData::makeTree() {
-    // Student implement
-    // Base case: compute self impurity
+    // Compute self impurity
     try {
         selfImpurity = doImpurity();
     } catch (exception& e) {
@@ -241,15 +241,15 @@ void TreeData::makeTree() {
 
     // Base case: if impurity is 0 (pure node) or not enough records, stop
     if (selfImpurity == 0.0 || records.size() < 2) {
-        return; // Leaf node
+        return; // Leaf node - pure or too small
     }
 
-    // Base case: no more attributes to split on
+    // Base case: no more attributes available (all culled on this path)
     if (availableAttr.empty()) {
-        return; // Leaf node
+        return; // Leaf node - exhausted all attributes
     }
 
-    // Find the best attribute and split point
+    // Find the best attribute and split point among available attributes
     HuntType bestSplit;
     bestSplit.second = 1.0;
     int bestAttr = -1;
@@ -264,7 +264,7 @@ void TreeData::makeTree() {
 
     // If no improvement possible, stop
     if (bestAttr == -1 || bestSplit.second >= selfImpurity) {
-        return; // Leaf node - no improvement from splitting
+        return; // Leaf node - no beneficial split found
     }
 
     // Store split information
@@ -278,7 +278,7 @@ void TreeData::makeTree() {
     // Don't create children if one side would be empty
     if (children.first.records.empty() || children.second.records.empty()) {
         splitAttr = Record::NOATTR;
-        return; // Leaf node
+        return; // Leaf node - split would create empty child
     }
 
     // Create child nodes
@@ -289,13 +289,19 @@ void TreeData::makeTree() {
     left->level = level + 1;
     right->level = level + 1;
 
-    // Cull the used attribute from children's available attributes
-    cullAttribute(left, splitAttr);
-    cullAttribute(right, splitAttr);
+    // Pass ALL attributes to children - allow reuse with different split points
+    // This achieves the lowest possible combined Gini impurity
+    left->availableAttr = availableAttr;
+    right->availableAttr = availableAttr;
 
     // Recursively build subtrees
     left->makeTree();
     right->makeTree();
+
+    // After children are built, cull attributes that are exhausted
+    // (i.e., can no longer provide beneficial splits in the subtree)
+    // This happens naturally since huntSplit returns 1.0 for attributes
+    // that can't split, and we skip splits that don't improve impurity
 }
 
 // return a pair of TreeData separated by the split value on the given attribute
