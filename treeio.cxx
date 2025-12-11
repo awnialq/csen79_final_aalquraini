@@ -154,102 +154,85 @@ const TreeData::HuntType TreeData::huntSplit(const int whichAttr) const {
     if (nRecords < 2)
         return bestSplit; // not enough records to split
 
-    // Collect and sort unique attribute values
+    // sort the records based on the value of the given attribute
     vector<Record::AttrType> sortedValues;
     for (const auto& rec : records) {
         sortedValues.push_back(rec->getAttribute(whichAttr));
     }
     sort(sortedValues.begin(), sortedValues.end());
-    // Remove duplicates
+    // get rid of any duplicate points for the purpose of finding split points
     sortedValues.erase(unique(sortedValues.begin(), sortedValues.end()), sortedValues.end());
 
     if (sortedValues.size() < 2)
-        return bestSplit; // All values are the same, cannot split
+        return bestSplit; // sanity check. if all values are the same, you cannot split
 
-    // Use circular buffer to find inflection points (local minima)
+    // go thru each point and find a local minima using circular buffer
     const int bufSize = 3;
-    if (sortedValues.size() < 3) {
-        // With only 2 unique values, just compute impurity for the first split point
-        bestSplit.first = sortedValues[0];
-        bestSplit.second = combineImpurity(whichAttr, sortedValues[0]);
-        return bestSplit;
-    }
-
     HuntType buffer[bufSize];
-    // Initialize circular buffer with first 3 split points
-    for (int i = 0; i < bufSize; ++i) {
-        buffer[i].first = sortedValues[i];
-        buffer[i].second = combineImpurity(whichAttr, sortedValues[i]);
-        // Track the minimum as we go
-        if (buffer[i].second < bestSplit.second) {
-            bestSplit = buffer[i];
-        }
-    }
-
     int bufIndex = 0;
-    // Scan through remaining sorted unique values
-    for (size_t i = 3; i < sortedValues.size(); ++i) {
-        // Check for inflection point (local minimum) at the middle position
-        // buffer layout: [bufIndex] = oldest, [(bufIndex+1)%3] = middle, [(bufIndex+2)%3] = newest
-        HuntType &prev = buffer[bufIndex];
-        HuntType &curr = buffer[(bufIndex + 1) % 3];
-        HuntType &next = buffer[(bufIndex + 2) % 3];
-        
-        if (curr.second < prev.second && curr.second < next.second) {
-            // Found a local minimum
-            if (curr.second < bestSplit.second) {
-                bestSplit = curr;
-            }
-        }
+    int filled = 0;  // track how many buffer slots are filled
 
-        // Update circular buffer with new value
+    for (size_t i = 0; i < sortedValues.size(); ++i) {
+        // compute impurity for current value
         Record::AttrType currentValue = sortedValues[i];
         double currentImpurity = combineImpurity(whichAttr, currentValue);
+        
+        // add to circular buffer
         buffer[bufIndex].first = currentValue;
         buffer[bufIndex].second = currentImpurity;
         
-        // Track overall minimum
+        // track overall minimum
         if (currentImpurity < bestSplit.second) {
             bestSplit.first = currentValue;
             bestSplit.second = currentImpurity;
         }
         
-        bufIndex = (bufIndex + 1) % 3;
-    }
-
-    // Check the last middle element for inflection
-    HuntType &prev = buffer[bufIndex];
-    HuntType &curr = buffer[(bufIndex + 1) % 3];
-    HuntType &next = buffer[(bufIndex + 2) % 3];
-    if (curr.second < prev.second && curr.second < next.second) {
-        if (curr.second < bestSplit.second) {
-            bestSplit = curr;
+        if (filled < bufSize) {
+            ++filled;
         }
+        
+        // once buffer is full, check for local minimum at the middle position
+        if (filled == bufSize) {
+            // buffer layout after adding at bufIndex:
+            // oldest = (bufIndex+1)%3, middle = (bufIndex+2)%3, newest = bufIndex
+            HuntType &prev = buffer[(bufIndex + 1) % 3];
+            HuntType &curr = buffer[(bufIndex + 2) % 3];
+            HuntType &next = buffer[bufIndex];
+            
+            if (curr.second < prev.second && curr.second < next.second) {
+                // Found a local minimum
+                if (curr.second < bestSplit.second) {
+                    bestSplit = curr;
+                }
+            }
+        }
+        
+        bufIndex = (bufIndex + 1) % 3;
     }
 
     return bestSplit;
 }
 
-// Make decision tree, recursively descend
+// Make decision tree recursively from the top down
 void TreeData::makeTree() {
-    // Compute self impurity
+    // compute impurity of the current sub-tree
     try {
         selfImpurity = doImpurity();
-    } catch (exception& e) {
+    } catch (exception& e) {    // doImpurity can throw if records is empty
         selfImpurity = 1.0;
     }
 
-    // Base case: if impurity is 0 (pure node) or not enough records, stop
+    // if impurity is 0 (pure node) or not enough records, stop
     if (selfImpurity == 0.0 || records.size() < 2) {
-        return; // Leaf node - pure or too small
+        return; // basically means you are a leaf node
     }
 
-    // Base case: no more attributes available (all culled on this path)
+    // no more attributes available (all attributes have be used earlier in the tree at this point)
     if (availableAttr.empty()) {
-        return; // Leaf node - exhausted all attributes
+        return; // basically means you have a leaf node
     }
 
-    // Find the best attribute and split point among available attributes
+    // hunt for the best split for each attribute available at that level
     HuntType bestSplit;
     bestSplit.second = 1.0;
     int bestAttr = -1;
@@ -262,23 +245,23 @@ void TreeData::makeTree() {
         }
     }
 
-    // If no improvement possible, stop
+    // check if there is no improvement
     if (bestAttr == -1 || bestSplit.second >= selfImpurity) {
-        return; // Leaf node - no beneficial split found
+        return; // no beneficial split found
     }
 
-    // Store split information
+    // save the best split info
     splitAttr = bestAttr;
     splitAt = bestSplit.first;
     improvedImpurity = bestSplit.second;
 
-    // Split the data
+    // do the actual ssplitting
     TreePair children = split(splitAttr, splitAt);
 
-    // Don't create children if one side would be empty
+    // if one side is empty, do not split as you will not have any records on one side. Basically a leaf node
     if (children.first.records.empty() || children.second.records.empty()) {
         splitAttr = Record::NOATTR;
-        return; // Leaf node - split would create empty child
+        return; 
     }
 
     // Create child nodes
@@ -289,19 +272,21 @@ void TreeData::makeTree() {
     left->level = level + 1;
     right->level = level + 1;
 
-    // Pass ALL attributes to children - allow reuse with different split points
-    // This achieves the lowest possible combined Gini impurity
-    left->availableAttr = availableAttr;
-    right->availableAttr = availableAttr;
+    // Cull the split attribute from available attributes to prevent overfitting
+    // Each attribute can only be used once per path from root to leaf
+    vector<int> remainingAttr;
+    for (int attr : availableAttr) {
+        if (attr != splitAttr) {
+            remainingAttr.push_back(attr);
+        }
+    }
+    left->availableAttr = remainingAttr;
+    right->availableAttr = remainingAttr;
 
-    // Recursively build subtrees
+    // recurisvely build subtrees
     left->makeTree();
     right->makeTree();
 
-    // After children are built, cull attributes that are exhausted
-    // (i.e., can no longer provide beneficial splits in the subtree)
-    // This happens naturally since huntSplit returns 1.0 for attributes
-    // that can't split, and we skip splits that don't improve impurity
 }
 
 // return a pair of TreeData separated by the split value on the given attribute

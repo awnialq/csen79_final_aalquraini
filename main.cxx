@@ -18,10 +18,10 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // Open training file and build tree
+    // training file data
     ifstream trainFile(argv[1]);
     if (!trainFile) {
-        cerr << "Error: Cannot open training file: " << argv[1] << endl;
+        cerr << "Cannot open training file: " << argv[1] << endl;
         return 1;
     }
 
@@ -33,14 +33,14 @@ int main(int argc, char *argv[]) {
     giniData.makeTree();
     cout << giniData;
 
-    // Open test file (can be the same file)
+    // test file data
     ifstream testFile(argv[2]);
     if (!testFile) {
-        cerr << "Error: Cannot open test file: " << argv[2] << endl;
+        cerr << "Cannot open test file: " << argv[2] << endl;
         return 1;
     }
 
-    // Test each record using decide
+    // test each record using the decide function in treedata.cxx
     cout << "\nTesting decide function...\n" << endl;
     Record testRecord;
     int correct = 0;
